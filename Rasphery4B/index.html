@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pi Vision 🍓 Smart Object Recognition</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      min-height: 100vh;
+      color: #e0e0e0;
+    }
+
+    .container { max-width: 700px; margin: 0 auto; padding: 20px; }
+
+    /* ── Header ── */
+    header {
+      text-align: center;
+      padding: 30px 0 20px;
+    }
+    header h1 { font-size: 2.4rem; color: #e94560; letter-spacing: 2px; }
+    header h1 span { color: #fff; }
+    header p { color: #a0aec0; margin-top: 8px; font-size: 1rem; }
+    .badge {
+      display: inline-block;
+      background: #e94560;
+      color: white;
+      padding: 3px 12px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      margin-top: 8px;
+      font-weight: 600;
+      letter-spacing: 1px;
+    }
+
+    /* ── Upload / Capture Box ── */
+    .card {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 16px;
+      padding: 28px;
+      margin-bottom: 20px;
+      backdrop-filter: blur(10px);
+    }
+    .card h2 { font-size: 1.1rem; color: #a0c4ff; margin-bottom: 18px; }
+
+    /* Drop zone */
+    .drop-zone {
+      border: 2px dashed #e94560;
+      border-radius: 12px;
+      padding: 40px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s;
+      position: relative;
+    }
+    .drop-zone:hover, .drop-zone.drag-over {
+      background: rgba(233, 69, 96, 0.1);
+      border-color: #ff6b6b;
+    }
+    .drop-zone input[type=file] {
+      position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+    }
+    .drop-zone .icon { font-size: 3rem; }
+    .drop-zone p { color: #a0aec0; margin-top: 10px; }
+    .drop-zone p strong { color: #e94560; }
+
+    /* Preview image */
+    #preview-container { margin-top: 16px; display: none; text-align: center; }
+    #preview-img {
+      max-width: 100%; max-height: 300px;
+      border-radius: 10px;
+      border: 2px solid rgba(255,255,255,0.1);
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 13px 28px;
+      border-radius: 10px;
+      border: none;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      width: 100%;
+      margin-top: 14px;
+    }
+    .btn-primary { background: linear-gradient(135deg, #e94560, #c0392b); color: white; }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(233,69,96,0.4); }
+    .btn-secondary { background: linear-gradient(135deg, #0f3460, #533483); color: white; }
+    .btn-secondary:hover { transform: translateY(-2px); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
+
+    /* ── Results ── */
+    #results { display: none; }
+
+    .result-header {
+      display: flex; align-items: center; gap: 12px;
+      margin-bottom: 20px;
+    }
+    .result-emoji { font-size: 2.5rem; }
+    .result-label { font-size: 1.8rem; font-weight: 700; color: #fff; }
+    .result-time { font-size: 0.8rem; color: #a0aec0; margin-top: 4px; }
+
+    /* Confidence bars */
+    .predictions-title { color: #a0c4ff; font-size: 0.85rem; margin-bottom: 12px; font-weight: 600; letter-spacing: 1px; }
+    .prediction-item { margin-bottom: 12px; }
+    .prediction-top { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 0.9rem; }
+    .prediction-name { color: #e0e0e0; }
+    .prediction-pct { color: #e94560; font-weight: 700; }
+    .bar-bg { background: rgba(255,255,255,0.1); border-radius: 4px; height: 8px; overflow: hidden; }
+    .bar-fill {
+      height: 100%; border-radius: 4px;
+      background: linear-gradient(90deg, #e94560, #ff6b6b);
+      transition: width 0.8s ease;
+    }
+    .bar-fill.top { background: linear-gradient(90deg, #00b4d8, #90e0ef); }
+
+    /* Fun fact */
+    .fun-fact {
+      background: rgba(0, 180, 216, 0.1);
+      border: 1px solid rgba(0, 180, 216, 0.3);
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-top: 18px;
+      font-size: 0.9rem;
+      color: #90e0ef;
+      line-height: 1.5;
+    }
+    .fun-fact strong { display: block; margin-bottom: 4px; color: #00b4d8; }
+
+    /* Loading spinner */
+    .spinner {
+      display: inline-block; width: 22px; height: 22px;
+      border: 3px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Error */
+    .error-box {
+      background: rgba(233, 69, 96, 0.15);
+      border: 1px solid rgba(233, 69, 96, 0.4);
+      border-radius: 10px;
+      padding: 14px;
+      color: #ff6b6b;
+      margin-top: 14px;
+      display: none;
+    }
+
+    /* Pi Camera section */
+    .camera-section { display: none; }
+    .pi-badge {
+      display: inline-block; background: #27ae60; color: white;
+      padding: 2px 10px; border-radius: 20px; font-size: 0.7rem; margin-left: 8px;
+    }
+
+    /* Info bar */
+    .info-bar {
+      display: flex; gap: 10px; flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    .info-chip {
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 20px;
+      padding: 5px 14px;
+      font-size: 0.78rem;
+      color: #a0c4ff;
+    }
+
+    footer { text-align: center; color: #4a5568; font-size: 0.8rem; padding: 30px 0 20px; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <header>
+    <h1>🍓 Pi <span>Vision</span></h1>
+    <p>Smart Object Recognition powered by MobileNetV2 CNN</p>
+    <span class="badge">RASPBERRY PI 4 · AI ON EDGE</span>
+  </header>
+
+  <!-- Info chips -->
+  <div class="info-bar">
+    <span class="info-chip">🧠 MobileNetV2 CNN</span>
+    <span class="info-chip">🏷️ 1000 Object Classes</span>
+    <span class="info-chip">⚡ Runs on Pi CPU</span>
+    <span class="info-chip">📷 No Cloud Needed</span>
+  </div>
+
+  <!-- Upload Card -->
+  <div class="card">
+    <h2>📤 Upload a Photo to Identify</h2>
+
+    <div class="drop-zone" id="drop-zone">
+      <input type="file" id="file-input" accept="image/*" capture="environment" />
+      <div class="icon">📷</div>
+      <p>Tap to take a photo or upload an image</p>
+      <p style="margin-top:6px; font-size:0.85rem;"><strong>Any object, animal, food, vehicle...</strong></p>
+    </div>
+
+    <div id="preview-container">
+      <img id="preview-img" src="" alt="Preview" />
+    </div>
+
+    <button class="btn btn-primary" id="classify-btn" disabled>
+      🔍 Identify Object
+    </button>
+
+    <div class="error-box" id="error-box"></div>
+  </div>
+
+  <!-- Pi Camera Card (shown only if Pi Camera connected) -->
+  {% if use_pi_camera %}
+  <div class="card camera-section" style="display:block">
+    <h2>📸 Pi Camera <span class="pi-badge">LIVE</span></h2>
+    <p style="color:#a0aec0; font-size:0.9rem; margin-bottom:14px;">
+      Capture directly from your connected Pi Camera Module.
+    </p>
+    <button class="btn btn-secondary" id="capture-btn">
+      📸 Capture & Identify
+    </button>
+    <div id="capture-preview" style="margin-top:16px; text-align:center; display:none;">
+      <img id="capture-img" src="" alt="Captured" style="max-width:100%;border-radius:10px;" />
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Results Card -->
+  <div class="card" id="results">
+    <div class="result-header">
+      <div class="result-emoji" id="result-emoji">🤔</div>
+      <div>
+        <div class="result-label" id="result-label">Loading...</div>
+        <div class="result-time" id="result-time"></div>
+      </div>
+    </div>
+
+    <div class="predictions-title">TOP 5 PREDICTIONS</div>
+    <div id="predictions-list"></div>
+
+    <div class="fun-fact" id="fun-fact" style="display:none">
+      <strong>💡 Fun Fact</strong>
+      <span id="fun-fact-text"></span>
+    </div>
+  </div>
+
+</div>
+<footer>Pi Vision · MobileNetV2 on Raspberry Pi 4 · CNN Project for Students</footer>
+
+<script>
+const fileInput = document.getElementById('file-input');
+const dropZone = document.getElementById('drop-zone');
+const previewContainer = document.getElementById('preview-container');
+const previewImg = document.getElementById('preview-img');
+const classifyBtn = document.getElementById('classify-btn');
+const resultsDiv = document.getElementById('results');
+const errorBox = document.getElementById('error-box');
+
+const EMOJIS = {
+  cat:'🐱', dog:'🐶', bird:'🐦', fish:'🐟', horse:'🐴', elephant:'🐘',
+  banana:'🍌', apple:'🍎', pizza:'🍕', hamburger:'🍔', coffee:'☕', cake:'🎂',
+  car:'🚗', truck:'🚛', bicycle:'🚲', motorcycle:'🏍️', airplane:'✈️', boat:'🚢',
+  laptop:'💻', phone:'📱', keyboard:'⌨️', monitor:'🖥️', camera:'📷',
+  chair:'🪑', table:'🪞', book:'📚', cup:'☕', bottle:'🍾', vase:'🏺',
+  flower:'🌸', tree:'🌳', mountain:'⛰️', ocean:'🌊',
+  person:'🧑', face:'😊',
+};
+
+function getEmoji(label) {
+  const l = label.toLowerCase();
+  for (const [k, v] of Object.entries(EMOJIS)) {
+    if (l.includes(k)) return v;
+  }
+  return '🔍';
+}
+
+function showError(msg) {
+  errorBox.textContent = '❌ ' + msg;
+  errorBox.style.display = 'block';
+}
+
+function hideError() {
+  errorBox.style.display = 'none';
+}
+
+function renderResults(data) {
+  resultsDiv.style.display = 'block';
+  document.getElementById('result-label').textContent = data.top_label;
+  document.getElementById('result-emoji').textContent = getEmoji(data.top_label);
+  document.getElementById('result-time').textContent = `⏱️ Inference: ${data.inference_time_ms}ms on Pi CPU`;
+
+  const list = document.getElementById('predictions-list');
+  list.innerHTML = '';
+  data.predictions.forEach((p, i) => {
+    const div = document.createElement('div');
+    div.className = 'prediction-item';
+    div.innerHTML = `
+      <div class="prediction-top">
+        <span class="prediction-name">${i===0?'👑 ':''}${p.label}</span>
+        <span class="prediction-pct">${p.confidence.toFixed(1)}%</span>
+      </div>
+      <div class="bar-bg">
+        <div class="bar-fill ${i===0?'top':''}" style="width:0%" data-width="${p.confidence}%"></div>
+      </div>`;
+    list.appendChild(div);
+  });
+
+  // Animate bars
+  setTimeout(() => {
+    document.querySelectorAll('.bar-fill').forEach(b => {
+      b.style.width = b.dataset.width;
+    });
+  }, 50);
+
+  // Fun fact
+  const ff = document.getElementById('fun-fact');
+  if (data.fun_fact) {
+    document.getElementById('fun-fact-text').textContent = data.fun_fact;
+    ff.style.display = 'block';
+  } else {
+    ff.style.display = 'none';
+  }
+
+  resultsDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ── File upload ──
+fileInput.addEventListener('change', () => {
+  const file = fileInput.files[0];
+  if (!file) return;
+  const url = URL.createObjectURL(file);
+  previewImg.src = url;
+  previewContainer.style.display = 'block';
+  classifyBtn.disabled = false;
+  hideError();
+});
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) { fileInput.files = e.dataTransfer.files; fileInput.dispatchEvent(new Event('change')); }
+});
+
+classifyBtn.addEventListener('click', async () => {
+  const file = fileInput.files[0];
+  if (!file) return;
+
+  classifyBtn.disabled = true;
+  classifyBtn.innerHTML = '<div class="spinner"></div> Analyzing...';
+  hideError();
+
+  const formData = new FormData();
+  formData.append('image', file);
+
+  try {
+    const res = await fetch('/classify', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    renderResults(data);
+  } catch (err) {
+    showError(err.message);
+  } finally {
+    classifyBtn.disabled = false;
+    classifyBtn.innerHTML = '🔍 Identify Object';
+  }
+});
+
+// ── Pi Camera capture ──
+const captureBtn = document.getElementById('capture-btn');
+if (captureBtn) {
+  captureBtn.addEventListener('click', async () => {
+    captureBtn.disabled = true;
+    captureBtn.innerHTML = '<div class="spinner"></div> Capturing...';
+    hideError();
+
+    try {
+      const res = await fetch('/capture', { method: 'POST' });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+
+      if (data.image_b64) {
+        document.getElementById('capture-img').src = 'data:image/jpeg;base64,' + data.image_b64;
+        document.getElementById('capture-preview').style.display = 'block';
+      }
+      renderResults(data);
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      captureBtn.disabled = false;
+      captureBtn.innerHTML = '📸 Capture & Identify';
+    }
+  });
+}
+</script>
+</body>
+</html>
